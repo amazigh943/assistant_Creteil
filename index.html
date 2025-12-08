@@ -583,7 +583,29 @@ const App=()=>{
 
     // Page de vérification OTP
     if(page==='verify'){
-        return<ThemeProvider><VerifyOTPPage email={verifyEmail} type={verifyType} onSuccess={(data)=>{if(verifyType==='signup'){setPage('login')}else{setShowNewPassword(true);setPage('login')}}} onBack={()=>setPage(verifyType==='signup'?'register':'forgot')}/></ThemeProvider>;
+  return(
+    <ThemeProvider>
+      <VerifyOTPPage
+        email={verifyEmail}
+        type={verifyType}
+        onSuccess={(data)=>{
+          if(data?.user){
+            setUser(data.user); // ✅ correction critique anti-page-blanche
+          }
+
+          if(verifyType==='signup'){
+            setPage('login');
+          }else{
+            setShowNewPassword(true);
+            setPage('login');
+          }
+        }}
+        onBack={()=>setPage(verifyType==='signup'?'register':'forgot')}
+      />
+    </ThemeProvider>
+  );
+}
+
     }
 
     // Page inscription
