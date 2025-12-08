@@ -4,24 +4,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Assistant ADN — Académie de Créteil</title>
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>const originalWarn=console.warn;console.warn=(...a)=>{if(a[0]?.includes?.('cdn.tailwindcss.com'))return;originalWarn.apply(console,a)};</script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script>
-        tailwind.config={darkMode:'class',theme:{extend:{colors:{'gov':{'blue':'#000091','blue-hover':'#1212ff','red':'#e1000f','light-blue':'#e3e3fd','light-grey':'#f6f6f6','grey':'#666666','dark':'#161616','dark-elevated':'#1e1e1e','dark-border':'#2a2a2a'}},fontFamily:{'source':['"Source Sans 3"','system-ui','sans-serif']}}}}
+        tailwind.config={darkMode:'class',theme:{extend:{colors:{'gov':{'blue':'#000091','blue-hover':'#1212ff','red':'#e1000f','light-blue':'#e3e3fd','light-grey':'#f6f6f6','grey':'#666666','dark':'#161616','dark-elevated':'#1e1e1e','dark-border':'#2a2a2a','dark-bg':'#121212'}},fontFamily:{'source':['"Source Sans 3"','system-ui','sans-serif']}}}}
     </script>
     <style>
-        *{scrollbar-width:thin}.light *{scrollbar-color:#000091 #e5e5e5}.dark *{scrollbar-color:#5c5cff #1e1e1e}*::-webkit-scrollbar{width:5px}*::-webkit-scrollbar-thumb{border-radius:3px}.light *::-webkit-scrollbar-thumb{background:#000091}.dark *::-webkit-scrollbar-thumb{background:#5c5cff}
+        *{scrollbar-width:thin;box-sizing:border-box}
+        .light *{scrollbar-color:#000091 #e5e5e5}.dark *{scrollbar-color:#5c5cff #1e1e1e}
         @keyframes typing{0%,60%,100%{opacity:.3}30%{opacity:1}}.typing-dot{animation:typing 1.4s infinite}.typing-dot:nth-child(2){animation-delay:.2s}.typing-dot:nth-child(3){animation-delay:.4s}
         @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}.animate-fade-in{animation:fadeIn .25s ease-out}
-        .sidebar-item{transition:background-color .15s ease,border-color .15s ease}
         input:focus,textarea:focus,button:focus-visible{outline:2px solid #000091;outline-offset:2px}.dark input:focus,.dark textarea:focus,.dark button:focus-visible{outline-color:#5c5cff}
+        .otp-input{width:48px;height:56px;text-align:center;font-size:24px;font-weight:600;border-radius:8px;border:2px solid #d1d5db;transition:all 0.2s}
+        .otp-input:focus{border-color:#000091;box-shadow:0 0 0 3px rgba(0,0,145,0.1)}
+        .dark .otp-input{background:#1e1e1e;border-color:#3a3a3a;color:white}
+        .dark .otp-input:focus{border-color:#5c5cff;box-shadow:0 0 0 3px rgba(92,92,255,0.2)}
     </style>
 </head>
 <body class="font-source antialiased">
@@ -32,6 +39,18 @@ const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const RAG_API_URL='http://localhost:5679/webhook/Rag';
 const ADMIN_EMAILS=['admin@ac-creteil.fr','thadjazi@ac-creteil.fr'];
 const supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
+const SECURITY={MAX_MESSAGE_LENGTH:5000,MAX_FILE_SIZE:10*1024*1024,RATE_LIMIT_MESSAGES:20,RATE_LIMIT_WINDOW:60000,PASSWORD_MIN_LENGTH:8,ALLOWED_FILE_TYPES:['image/jpeg','image/png','image/gif','image/webp','application/pdf'],OTP_LENGTH:6,OTP_EXPIRATION:600};
+
+const sanitizeInput=(str)=>{if(typeof str!=='string')return'';return str.replace(/[<>]/g,'').trim().slice(0,SECURITY.MAX_MESSAGE_LENGTH)};
+const sanitizeHTML=(str)=>{if(typeof str!=='string')return'';const div=document.createElement('div');div.textContent=str;return div.innerHTML};
+const createRateLimiter=(limit,window)=>{const requests=[];return()=>{const now=Date.now();const windowStart=now-window;while(requests.length&&requests[0]<windowStart)requests.shift();if(requests.length>=limit)return false;requests.push(now);return true}};
+const messageRateLimiter=createRateLimiter(SECURITY.RATE_LIMIT_MESSAGES,SECURITY.RATE_LIMIT_WINDOW);
+const loginAttempts={};
+const checkLoginAttempts=(email)=>{const now=Date.now();const data=loginAttempts[email];if(!data)return{allowed:true,remaining:5};if(data.lockedUntil&&now<data.lockedUntil)return{allowed:false,lockedFor:Math.ceil((data.lockedUntil-now)/1000)};if(data.lockedUntil&&now>=data.lockedUntil){delete loginAttempts[email];return{allowed:true,remaining:5}}return{allowed:true,remaining:5-data.attempts}};
+const recordLoginAttempt=(email,success)=>{if(success){delete loginAttempts[email];return}if(!loginAttempts[email])loginAttempts[email]={attempts:0};loginAttempts[email].attempts++;if(loginAttempts[email].attempts>=5)loginAttempts[email].lockedUntil=Date.now()+900000};
+const checkPasswordStrength=(password)=>{const checks={length:password.length>=8,uppercase:/[A-Z]/.test(password),lowercase:/[a-z]/.test(password),number:/[0-9]/.test(password),special:/[^A-Za-z0-9]/.test(password)};const score=Object.values(checks).filter(Boolean).length;return{checks,score,strong:score>=4}};
+const isValidEmail=(email)=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 const ThemeContext=React.createContext();
 const ThemeProvider=({children})=>{const[isDark,setIsDark]=React.useState(()=>{const s=localStorage.getItem('adn-theme');return s?s==='dark':window.matchMedia('(prefers-color-scheme:dark)').matches});React.useEffect(()=>{localStorage.setItem('adn-theme',isDark?'dark':'light');document.documentElement.classList.toggle('dark',isDark)},[isDark]);return<ThemeContext.Provider value={{isDark,toggleTheme:()=>setIsDark(!isDark)}}><div className={isDark?'dark':'light'}>{children}</div></ThemeContext.Provider>};
@@ -62,40 +81,526 @@ AlertCircle:({size=18})=><svg width={size} height={size} viewBox="0 0 24 24" fil
 Search:({size=18})=><svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>,
 ThumbsUp:({size=16})=><svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>,
 ThumbsDown:({size=16})=><svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>,
-Download:({size=18})=><svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+Download:({size=18})=><svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
+Shield:({size=18})=><svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+Lock:({size=18})=><svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+Eye:({size=18})=><svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+EyeOff:({size=18})=><svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>,
+Clock:({size=18})=><svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+RefreshCw:({size=18})=><svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
 };
 
-const GovLogo=({className=""})=><div className={`flex items-center gap-3 ${className}`}><div className="flex flex-col items-center leading-none"><div className="flex gap-[2px]"><div className="w-2 h-3 bg-gov-blue dark:bg-blue-400"></div><div className="w-2 h-3 bg-white dark:bg-gray-200"></div><div className="w-2 h-3 bg-gov-red dark:bg-red-400"></div></div><div className="w-6 h-[2px] bg-gov-red dark:bg-red-400 mt-1"></div></div><div className="border-l border-gray-300 dark:border-gray-600 pl-3"><div className="text-[10px] font-semibold text-gov-grey dark:text-gray-400 uppercase tracking-wider leading-tight">Académie</div><div className="text-[10px] font-semibold text-gov-grey dark:text-gray-400 uppercase tracking-wider leading-tight">de Créteil</div></div></div>;
+const GovLogo=()=><div className="flex items-center gap-3"><div className="flex flex-col items-center leading-none"><div className="flex gap-[2px]"><div className="w-2 h-3 bg-gov-blue dark:bg-blue-400"></div><div className="w-2 h-3 bg-white dark:bg-gray-200 border border-gray-200 dark:border-gray-600"></div><div className="w-2 h-3 bg-gov-red dark:bg-red-400"></div></div><div className="w-6 h-[2px] bg-gov-red dark:bg-red-400 mt-1"></div></div><div className="border-l border-gray-300 dark:border-gray-600 pl-3"><div className="text-[10px] font-semibold text-gov-grey dark:text-gray-400 uppercase tracking-wider leading-tight">Académie</div><div className="text-[10px] font-semibold text-gov-grey dark:text-gray-400 uppercase tracking-wider leading-tight">de Créteil</div></div></div>;
 
-const ThemeToggle=()=>{const{isDark,toggleTheme}=useTheme();return<button onClick={toggleTheme} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gov-dark-border transition-colors text-gov-grey dark:text-gray-400" aria-label={isDark?'Mode jour':'Mode nuit'}>{isDark?<Icon.Sun size={18}/>:<Icon.Moon size={18}/>}</button>};
+const ThemeToggle=()=>{const{isDark,toggleTheme}=useTheme();return<button onClick={toggleTheme} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gov-dark-border transition-colors text-gov-grey dark:text-gray-400">{isDark?<Icon.Sun size={18}/>:<Icon.Moon size={18}/>}</button>};
 
-const TypingIndicator=()=><div className="flex items-start gap-3 px-4 py-3 animate-fade-in"><div className="w-8 h-8 rounded bg-gov-blue dark:bg-blue-600 flex items-center justify-center text-white flex-shrink-0"><Icon.Bot size={16}/></div><div className="bg-gray-100 dark:bg-gov-dark-elevated rounded-lg rounded-tl-none px-4 py-3"><div className="flex gap-1.5"><div className="w-1.5 h-1.5 bg-gov-grey dark:bg-gray-500 rounded-full typing-dot"></div><div className="w-1.5 h-1.5 bg-gov-grey dark:bg-gray-500 rounded-full typing-dot"></div><div className="w-1.5 h-1.5 bg-gov-grey dark:bg-gray-500 rounded-full typing-dot"></div></div></div></div>;
+const TypingIndicator=()=><div className="flex items-start gap-3 px-4 py-3 animate-fade-in"><div className="w-8 h-8 rounded bg-gov-blue flex items-center justify-center text-white flex-shrink-0"><Icon.Bot size={16}/></div><div className="bg-gray-100 dark:bg-gov-dark-elevated rounded-lg rounded-tl-none px-4 py-3"><div className="flex gap-1.5"><div className="w-1.5 h-1.5 bg-gov-grey rounded-full typing-dot"></div><div className="w-1.5 h-1.5 bg-gov-grey rounded-full typing-dot"></div><div className="w-1.5 h-1.5 bg-gov-grey rounded-full typing-dot"></div></div></div></div>;
 
-// PAGE MOT DE PASSE OUBLIE
-const ForgotPasswordPage=({onBack})=>{const[email,setEmail]=React.useState('');const[loading,setLoading]=React.useState(false);const[sent,setSent]=React.useState(false);const[error,setError]=React.useState('');const handleSubmit=async(e)=>{e.preventDefault();setLoading(true);setError('');try{const{error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin});if(error)throw error;setSent(true)}catch(err){setError(err.message)}finally{setLoading(false)}};if(sent){return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark flex flex-col"><header className="bg-white dark:bg-gov-dark-elevated border-b border-gray-200 dark:border-gov-dark-border px-6 py-4"><div className="max-w-7xl mx-auto flex items-center justify-between"><GovLogo/><ThemeToggle/></div></header><main className="flex-1 flex items-center justify-center p-6"><div className="w-full max-w-md"><div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg p-8 text-center"><div className="w-12 h-12 rounded-full bg-gov-light-blue dark:bg-blue-900/30 flex items-center justify-center mx-auto mb-4"><Icon.Mail size={24} className="text-gov-blue dark:text-blue-400"/></div><h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Email envoyé</h2><p className="text-gov-grey dark:text-gray-400 mb-2">Si un compte existe avec cette adresse, vous recevrez un email contenant un lien de réinitialisation.</p><p className="text-gov-blue dark:text-blue-400 font-medium mb-6">{email}</p><button onClick={onBack} className="w-full py-2.5 rounded bg-gov-blue hover:bg-gov-blue-hover text-white text-sm font-medium transition-colors">Retour à la connexion</button></div></div></main><footer className="bg-white dark:bg-gov-dark-elevated border-t border-gray-200 dark:border-gov-dark-border px-6 py-4"><p className="text-center text-xs text-gov-grey dark:text-gray-500">Ministère de l'Éducation nationale — Académie de Créteil</p></footer></div>}return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark flex flex-col"><header className="bg-white dark:bg-gov-dark-elevated border-b border-gray-200 dark:border-gov-dark-border px-6 py-4"><div className="max-w-7xl mx-auto flex items-center justify-between"><GovLogo/><ThemeToggle/></div></header><main className="flex-1 flex items-center justify-center p-6"><div className="w-full max-w-md"><div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg overflow-hidden"><div className="bg-gov-blue dark:bg-blue-900 px-6 py-5"><h1 className="text-xl font-semibold text-white">Mot de passe oublié</h1><p className="text-blue-200 text-sm mt-1">Réinitialisation du mot de passe</p></div><div className="p-6"><p className="text-sm text-gov-grey dark:text-gray-400 mb-6">Entrez votre adresse email. Si un compte existe, vous recevrez un lien pour réinitialiser votre mot de passe.</p><form onSubmit={handleSubmit} className="space-y-5"><div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Adresse email</label><input type="email" value={email} onChange={(e)=>setEmail(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" placeholder="prenom.nom@ac-creteil.fr" required/></div>{error&&<div className="flex items-start gap-2 p-3 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"><Icon.AlertCircle size={16} className="text-gov-red flex-shrink-0 mt-0.5"/><p className="text-sm text-gov-red dark:text-red-400">{error}</p></div>}<button type="submit" disabled={loading} className="w-full py-2.5 rounded bg-gov-blue hover:bg-gov-blue-hover text-white text-sm font-medium transition-colors disabled:opacity-50">{loading?'Envoi en cours...':'Envoyer le lien'}</button></form><div className="mt-6 pt-6 border-t border-gray-200 dark:border-gov-dark-border text-center"><button onClick={onBack} className="text-sm text-gov-blue dark:text-blue-400 hover:underline font-medium">Retour à la connexion</button></div></div></div></div></main><footer className="bg-white dark:bg-gov-dark-elevated border-t border-gray-200 dark:border-gov-dark-border px-6 py-4"><p className="text-center text-xs text-gov-grey dark:text-gray-500">Ministère de l'Éducation nationale — Académie de Créteil</p></footer></div>};
+const PasswordStrengthIndicator=({password})=>{const{checks,score}=checkPasswordStrength(password);const colors=['bg-red-500','bg-orange-500','bg-yellow-500','bg-lime-500','bg-green-500'];return<div className="mt-2"><div className="flex gap-1 mb-2">{[0,1,2,3,4].map(i=><div key={i} className={`h-1.5 flex-1 rounded ${i<score?colors[score-1]:'bg-gray-200 dark:bg-gray-700'}`}/>)}</div><ul className="text-xs text-gov-grey space-y-0.5"><li className={checks.length?'text-green-600':''}>{checks.length?'✓':'○'} 8 caractères minimum</li><li className={checks.uppercase?'text-green-600':''}>{checks.uppercase?'✓':'○'} Une majuscule</li><li className={checks.lowercase?'text-green-600':''}>{checks.lowercase?'✓':'○'} Une minuscule</li><li className={checks.number?'text-green-600':''}>{checks.number?'✓':'○'} Un chiffre</li><li className={checks.special?'text-green-600':''}>{checks.special?'✓':'○'} Un caractère spécial</li></ul></div>};
 
-const LoginPage=({onLogin,onSwitchToRegister,onForgotPassword})=>{const[email,setEmail]=React.useState('');const[password,setPassword]=React.useState('');const[loading,setLoading]=React.useState(false);const[error,setError]=React.useState('');const handleSubmit=async(e)=>{e.preventDefault();setLoading(true);setError('');try{const{data,error}=await supabase.auth.signInWithPassword({email,password});if(error)throw error;onLogin(data.user)}catch(err){setError(err.message==='Invalid login credentials'?'Identifiants incorrects. Vérifiez votre email et mot de passe.':err.message)}finally{setLoading(false)}};return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark flex flex-col"><header className="bg-white dark:bg-gov-dark-elevated border-b border-gray-200 dark:border-gov-dark-border px-6 py-4"><div className="max-w-7xl mx-auto flex items-center justify-between"><GovLogo/><ThemeToggle/></div></header><main className="flex-1 flex items-center justify-center p-6"><div className="w-full max-w-md"><div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg overflow-hidden"><div className="bg-gov-blue dark:bg-blue-900 px-6 py-5"><h1 className="text-xl font-semibold text-white">Assistant ADN</h1><p className="text-blue-200 text-sm mt-1">Portail d'assistance numérique</p></div><div className="p-6"><h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Connexion</h2><form onSubmit={handleSubmit} className="space-y-5"><div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Adresse email</label><input type="email" value={email} onChange={(e)=>setEmail(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm transition-colors" placeholder="prenom.nom@ac-creteil.fr" required/></div><div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Mot de passe</label><input type="password" value={password} onChange={(e)=>setPassword(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm transition-colors" placeholder="Votre mot de passe" required/><button type="button" onClick={onForgotPassword} className="text-xs text-gov-blue dark:text-blue-400 hover:underline mt-1.5">Mot de passe oublié ?</button></div>{error&&<div className="flex items-start gap-2 p-3 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"><Icon.AlertCircle size={16} className="text-gov-red flex-shrink-0 mt-0.5"/><p className="text-sm text-gov-red dark:text-red-400">{error}</p></div>}<button type="submit" disabled={loading} className="w-full py-2.5 rounded bg-gov-blue hover:bg-gov-blue-hover text-white text-sm font-medium transition-colors disabled:opacity-50">{loading?'Connexion en cours...':'Se connecter'}</button></form><div className="mt-6 pt-6 border-t border-gray-200 dark:border-gov-dark-border text-center"><p className="text-sm text-gov-grey dark:text-gray-400">Pas encore de compte ? <button onClick={onSwitchToRegister} className="text-gov-blue dark:text-blue-400 hover:underline font-medium">Créer un compte</button></p></div></div></div></div></main><footer className="bg-white dark:bg-gov-dark-elevated border-t border-gray-200 dark:border-gov-dark-border px-6 py-4"><p className="text-center text-xs text-gov-grey dark:text-gray-500">Ministère de l'Éducation nationale — Académie de Créteil</p></footer></div>};
+// ============================================
+// OTP INPUT COMPONENT
+// ============================================
+const OTPInput=({length=6,value,onChange,disabled})=>{
+    const inputRefs=React.useRef([]);
+    const handleChange=(index,e)=>{
+        const val=e.target.value.replace(/[^0-9]/g,'');
+        if(val.length<=1){
+            const newValue=value.split('');
+            newValue[index]=val;
+            onChange(newValue.join(''));
+            if(val&&index<length-1)inputRefs.current[index+1]?.focus();
+        }else if(val.length===length){
+            onChange(val);
+            inputRefs.current[length-1]?.focus();
+        }
+    };
+    const handleKeyDown=(index,e)=>{
+        if(e.key==='Backspace'&&!value[index]&&index>0){
+            inputRefs.current[index-1]?.focus();
+        }
+    };
+    const handlePaste=(e)=>{
+        e.preventDefault();
+        const paste=e.clipboardData.getData('text').replace(/[^0-9]/g,'').slice(0,length);
+        onChange(paste);
+        inputRefs.current[Math.min(paste.length,length-1)]?.focus();
+    };
+    return<div className="flex gap-2 justify-center">{Array.from({length}).map((_,i)=><input key={i} ref={el=>inputRefs.current[i]=el} type="text" inputMode="numeric" maxLength={1} value={value[i]||''} onChange={(e)=>handleChange(i,e)} onKeyDown={(e)=>handleKeyDown(i,e)} onPaste={handlePaste} disabled={disabled} className="otp-input" autoComplete="one-time-code"/>)}</div>;
+};
 
-const RegisterPage=({onSwitchToLogin})=>{const[email,setEmail]=React.useState('');const[password,setPassword]=React.useState('');const[confirmPassword,setConfirmPassword]=React.useState('');const[nom,setNom]=React.useState('');const[etablissement,setEtablissement]=React.useState('');const[loading,setLoading]=React.useState(false);const[error,setError]=React.useState('');const[success,setSuccess]=React.useState(false);const[resendCooldown,setResendCooldown]=React.useState(0);const[resendMessage,setResendMessage]=React.useState('');React.useEffect(()=>{if(resendCooldown>0){const timer=setTimeout(()=>setResendCooldown(resendCooldown-1),1000);return()=>clearTimeout(timer)}},[resendCooldown]);const handleSubmit=async(e)=>{e.preventDefault();setLoading(true);setError('');if(password!==confirmPassword){setError('Les mots de passe ne correspondent pas.');setLoading(false);return}if(password.length<6){setError('Le mot de passe doit contenir au moins 6 caractères.');setLoading(false);return}try{const{data,error}=await supabase.auth.signUp({email,password,options:{data:{nom,etablissement}}});if(error)throw error;if(data.user)await supabase.from('profiles').update({nom,etablissement}).eq('id',data.user.id);setSuccess(true);setResendCooldown(60)}catch(err){setError(err.message)}finally{setLoading(false)}};const handleResendEmail=async()=>{if(resendCooldown>0)return;setResendMessage('');try{const{error}=await supabase.auth.resend({type:'signup',email:email});if(error)throw error;setResendMessage('success');setResendCooldown(60)}catch(err){setResendMessage('error')}};if(success){return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark flex flex-col"><header className="bg-white dark:bg-gov-dark-elevated border-b border-gray-200 dark:border-gov-dark-border px-6 py-4"><div className="max-w-7xl mx-auto flex items-center justify-between"><GovLogo/><ThemeToggle/></div></header><main className="flex-1 flex items-center justify-center p-6"><div className="w-full max-w-md"><div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg p-8 text-center"><div className="w-12 h-12 rounded-full bg-gov-light-blue dark:bg-blue-900/30 flex items-center justify-center mx-auto mb-4"><Icon.Mail size={24} className="text-gov-blue dark:text-blue-400"/></div><h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Vérifiez votre messagerie</h2><p className="text-gov-grey dark:text-gray-400 mb-2">Un email de confirmation a été envoyé à :</p><p className="text-gov-blue dark:text-blue-400 font-medium mb-6">{email}</p><p className="text-sm text-gov-grey dark:text-gray-400 mb-6">Cliquez sur le lien contenu dans l'email pour activer votre compte.</p><button onClick={onSwitchToLogin} className="w-full py-2.5 rounded bg-gov-blue hover:bg-gov-blue-hover text-white text-sm font-medium transition-colors">Accéder à la connexion</button><div className="mt-6 pt-6 border-t border-gray-200 dark:border-gov-dark-border"><p className="text-sm text-gov-grey dark:text-gray-400 mb-3">Vous n'avez pas reçu l'email ?</p><button onClick={handleResendEmail} disabled={resendCooldown>0} className={`w-full py-2.5 rounded border text-sm font-medium transition-colors ${resendCooldown>0?'border-gray-200 dark:border-gov-dark-border text-gov-grey cursor-not-allowed':'border-gov-blue text-gov-blue hover:bg-gov-light-blue dark:border-blue-500 dark:text-blue-400 dark:hover:bg-blue-900/20'}`}>{resendCooldown>0?`Renvoyer dans ${resendCooldown}s`:"Renvoyer l'email"}</button>{resendMessage==='success'&&<p className="text-sm text-green-600 dark:text-green-400 mt-3">Email renvoyé.</p>}{resendMessage==='error'&&<p className="text-sm text-gov-red mt-3">Erreur. Réessayez plus tard.</p>}</div></div></div></main><footer className="bg-white dark:bg-gov-dark-elevated border-t border-gray-200 dark:border-gov-dark-border px-6 py-4"><p className="text-center text-xs text-gov-grey dark:text-gray-500">Ministère de l'Éducation nationale — Académie de Créteil</p></footer></div>}return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark flex flex-col"><header className="bg-white dark:bg-gov-dark-elevated border-b border-gray-200 dark:border-gov-dark-border px-6 py-4"><div className="max-w-7xl mx-auto flex items-center justify-between"><GovLogo/><ThemeToggle/></div></header><main className="flex-1 flex items-center justify-center p-6"><div className="w-full max-w-md"><div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg overflow-hidden"><div className="bg-gov-blue dark:bg-blue-900 px-6 py-5"><h1 className="text-xl font-semibold text-white">Créer un compte</h1><p className="text-blue-200 text-sm mt-1">Assistant ADN — Académie de Créteil</p></div><div className="p-6"><form onSubmit={handleSubmit} className="space-y-4"><div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Nom complet</label><input type="text" value={nom} onChange={(e)=>setNom(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" placeholder="Jean Dupont" required/></div><div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Établissement</label><input type="text" value={etablissement} onChange={(e)=>setEtablissement(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" placeholder="Lycée Victor Hugo"/></div><div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Adresse email</label><input type="email" value={email} onChange={(e)=>setEmail(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" placeholder="prenom.nom@ac-creteil.fr" required/></div><div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Mot de passe</label><input type="password" value={password} onChange={(e)=>setPassword(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" placeholder="Minimum 6 caractères" required/></div><div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Confirmer le mot de passe</label><input type="password" value={confirmPassword} onChange={(e)=>setConfirmPassword(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" placeholder="Confirmez votre mot de passe" required/></div>{error&&<div className="flex items-start gap-2 p-3 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"><Icon.AlertCircle size={16} className="text-gov-red flex-shrink-0 mt-0.5"/><p className="text-sm text-gov-red dark:text-red-400">{error}</p></div>}<button type="submit" disabled={loading} className="w-full py-2.5 rounded bg-gov-blue hover:bg-gov-blue-hover text-white text-sm font-medium transition-colors disabled:opacity-50">{loading?'Création en cours...':'Créer mon compte'}</button></form><div className="mt-6 pt-6 border-t border-gray-200 dark:border-gov-dark-border text-center"><p className="text-sm text-gov-grey dark:text-gray-400">Déjà inscrit ? <button onClick={onSwitchToLogin} className="text-gov-blue dark:text-blue-400 hover:underline font-medium">Se connecter</button></p></div></div></div></div></main><footer className="bg-white dark:bg-gov-dark-elevated border-t border-gray-200 dark:border-gov-dark-border px-6 py-4"><p className="text-center text-xs text-gov-grey dark:text-gray-500">Ministère de l'Éducation nationale — Académie de Créteil</p></footer></div>};
+// ============================================
+// VERIFY OTP PAGE (après inscription)
+// ============================================
+const VerifyOTPPage=({email,type='signup',onSuccess,onBack})=>{
+    const[otp,setOtp]=React.useState('');
+    const[loading,setLoading]=React.useState(false);
+    const[error,setError]=React.useState('');
+    const[timer,setTimer]=React.useState(SECURITY.OTP_EXPIRATION);
+    const[canResend,setCanResend]=React.useState(false);
+    const[resendLoading,setResendLoading]=React.useState(false);
 
-const ProfilePage=({user,profile,onBack,onUpdateProfile})=>{const[nom,setNom]=React.useState(profile?.nom||'');const[etablissement,setEtablissement]=React.useState(profile?.etablissement||'');const[newPassword,setNewPassword]=React.useState('');const[loading,setLoading]=React.useState(false);const[message,setMessage]=React.useState({type:'',text:''});const handleUpdateProfile=async(e)=>{e.preventDefault();setLoading(true);setMessage({type:'',text:''});try{await supabase.from('profiles').update({nom,etablissement}).eq('id',user.id);onUpdateProfile({nom,etablissement});setMessage({type:'success',text:'Profil mis à jour.'})}catch(err){setMessage({type:'error',text:err.message})}finally{setLoading(false)}};const handleChangePassword=async(e)=>{e.preventDefault();if(newPassword.length<6){setMessage({type:'error',text:'Minimum 6 caractères.'});return}setLoading(true);setMessage({type:'',text:''});try{await supabase.auth.updateUser({password:newPassword});setMessage({type:'success',text:'Mot de passe modifié.'});setNewPassword('')}catch(err){setMessage({type:'error',text:err.message})}finally{setLoading(false)}};return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark"><div className="max-w-2xl mx-auto px-4 py-8"><button onClick={onBack} className="flex items-center gap-2 text-gov-grey dark:text-gray-400 hover:text-gov-blue dark:hover:text-white mb-6 transition-colors text-sm"><Icon.ArrowLeft size={16}/> Retour</button><div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg overflow-hidden"><div className="px-6 py-5 border-b border-gray-200 dark:border-gov-dark-border"><div className="flex items-center gap-4"><div className="w-14 h-14 rounded-full bg-gov-blue flex items-center justify-center text-white text-xl font-semibold">{(nom||user?.email)?.[0]?.toUpperCase()}</div><div><h1 className="text-lg font-semibold text-gray-900 dark:text-white">{nom||'Mon profil'}</h1><p className="text-sm text-gov-grey dark:text-gray-400">{user.email}</p></div></div></div><div className="p-6"><form onSubmit={handleUpdateProfile} className="space-y-4 mb-8"><h3 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wider">Informations</h3><div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Nom</label><input type="text" value={nom} onChange={(e)=>setNom(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm"/></div><div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Établissement</label><input type="text" value={etablissement} onChange={(e)=>setEtablissement(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm"/></div><button type="submit" disabled={loading} className="px-4 py-2 rounded bg-gov-blue hover:bg-gov-blue-hover text-white text-sm font-medium transition-colors disabled:opacity-50">Enregistrer</button></form><form onSubmit={handleChangePassword} className="space-y-4 pt-6 border-t border-gray-200 dark:border-gov-dark-border"><h3 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wider">Sécurité</h3><div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Nouveau mot de passe</label><input type="password" value={newPassword} onChange={(e)=>setNewPassword(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" placeholder="Minimum 6 caractères"/></div><button type="submit" disabled={loading||!newPassword} className="px-4 py-2 rounded bg-gray-100 dark:bg-gov-dark-border text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50">Modifier</button></form>{message.text&&<div className={`mt-6 p-3 rounded flex items-start gap-2 ${message.type==='success'?'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800':'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'}`}>{message.type==='success'?<Icon.Check size={16} className="text-green-600 flex-shrink-0 mt-0.5"/>:<Icon.AlertCircle size={16} className="text-gov-red flex-shrink-0 mt-0.5"/>}<p className={`text-sm ${message.type==='success'?'text-green-700 dark:text-green-400':'text-gov-red dark:text-red-400'}`}>{message.text}</p></div>}</div></div></div></div>};
+    React.useEffect(()=>{
+        if(timer>0){
+            const interval=setInterval(()=>setTimer(t=>t-1),1000);
+            return()=>clearInterval(interval);
+        }else{setCanResend(true)}
+    },[timer]);
 
-const AdminPage=({onBack})=>{const[stats,setStats]=React.useState({users:0,conversations:0,messages:0});const[users,setUsers]=React.useState([]);const[recentMessages,setRecentMessages]=React.useState([]);const[loading,setLoading]=React.useState(true);React.useEffect(()=>{loadStats()},[]);const loadStats=async()=>{try{const{data:profiles}=await supabase.from('profiles').select('*');const{data:convs}=await supabase.from('conversations').select('*');const{data:msgs}=await supabase.from('messages').select('*').order('created_at',{ascending:false}).limit(50);setUsers(profiles||[]);setRecentMessages(msgs||[]);setStats({users:profiles?.length||0,conversations:convs?.length||0,messages:msgs?.length||0})}catch(err){console.error(err)}finally{setLoading(false)}};const formatDate=(d)=>new Date(d).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});if(loading)return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark flex items-center justify-center"><p className="text-gov-grey text-sm">Chargement...</p></div>;return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark"><div className="max-w-6xl mx-auto px-4 py-8"><button onClick={onBack} className="flex items-center gap-2 text-gov-grey hover:text-gov-blue mb-6 transition-colors text-sm"><Icon.ArrowLeft size={16}/> Retour</button><h1 className="text-2xl font-semibold text-gray-900 dark:text-white mb-8">Administration</h1><div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8"><div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg p-5"><div className="flex items-center gap-4"><div className="w-10 h-10 rounded bg-gov-light-blue dark:bg-blue-900/30 flex items-center justify-center text-gov-blue dark:text-blue-400"><Icon.Users size={20}/></div><div><p className="text-xs font-medium text-gov-grey uppercase tracking-wider">Utilisateurs</p><p className="text-2xl font-semibold text-gray-900 dark:text-white">{stats.users}</p></div></div></div><div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg p-5"><div className="flex items-center gap-4"><div className="w-10 h-10 rounded bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400"><Icon.Message size={20}/></div><div><p className="text-xs font-medium text-gov-grey uppercase tracking-wider">Conversations</p><p className="text-2xl font-semibold text-gray-900 dark:text-white">{stats.conversations}</p></div></div></div><div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg p-5"><div className="flex items-center gap-4"><div className="w-10 h-10 rounded bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400"><Icon.Chart size={20}/></div><div><p className="text-xs font-medium text-gov-grey uppercase tracking-wider">Messages</p><p className="text-2xl font-semibold text-gray-900 dark:text-white">{stats.messages}</p></div></div></div></div><div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg overflow-hidden mb-8"><div className="px-5 py-4 border-b border-gray-200 dark:border-gov-dark-border"><h2 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wider">Utilisateurs</h2></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-gray-200 dark:border-gov-dark-border bg-gray-50 dark:bg-gov-dark"><th className="text-left px-5 py-3 font-medium text-gov-grey">Email</th><th className="text-left px-5 py-3 font-medium text-gov-grey">Nom</th><th className="text-left px-5 py-3 font-medium text-gov-grey">Établissement</th><th className="text-left px-5 py-3 font-medium text-gov-grey">Inscription</th></tr></thead><tbody>{users.map((u)=><tr key={u.id} className="border-b border-gray-100 dark:border-gov-dark-border last:border-0"><td className="px-5 py-3 text-gray-900 dark:text-gray-200">{u.email}</td><td className="px-5 py-3 text-gray-700 dark:text-gray-300">{u.nom||'—'}</td><td className="px-5 py-3 text-gray-700 dark:text-gray-300">{u.etablissement||'—'}</td><td className="px-5 py-3 text-gov-grey">{formatDate(u.created_at)}</td></tr>)}</tbody></table></div></div></div></div>};
+    const formatTime=(s)=>`${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
 
-// MESSAGE AVEC FEEDBACK
-const Message=({message,isUser,onFeedback})=>{const[copied,setCopied]=React.useState(false);const[feedback,setFeedback]=React.useState(message.feedback||null);const copyToClipboard=()=>{navigator.clipboard.writeText(message.content);setCopied(true);setTimeout(()=>setCopied(false),2000)};const handleFeedback=async(type)=>{setFeedback(type);if(onFeedback)onFeedback(message.id,type)};return<div className={`flex items-start gap-3 px-4 py-3 animate-fade-in ${isUser?'flex-row-reverse':''}`}><div className={`w-8 h-8 rounded flex items-center justify-center flex-shrink-0 text-white ${isUser?'bg-gov-grey':'bg-gov-blue dark:bg-blue-600'}`}>{isUser?<Icon.User size={16}/>:<Icon.Bot size={16}/>}</div><div className="max-w-[75%] group">{message.file&&message.fileType?.startsWith('image/')&&<div className="mb-2"><img src={message.file} alt="Fichier" className="max-w-[240px] max-h-[180px] object-cover rounded border border-gray-200 dark:border-gov-dark-border"/></div>}{message.file&&message.fileType==='application/pdf'&&<div className="mb-2 flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gov-dark-border rounded border border-gray-200 dark:border-gov-dark-border"><Icon.File size={16} className="text-gov-grey"/><span className="text-sm text-gray-700 dark:text-gray-300">{message.fileName||'PDF'}</span></div>}<div className={`rounded-lg px-4 py-3 ${isUser?'bg-gov-blue text-white rounded-tr-none':'bg-gray-100 dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border text-gray-800 dark:text-gray-200 rounded-tl-none'}`}><p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p></div>{!isUser&&<div className="mt-1.5 flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={()=>handleFeedback('up')} className={`flex items-center gap-1 text-xs transition-colors ${feedback==='up'?'text-green-600 dark:text-green-400':'text-gov-grey hover:text-green-600 dark:hover:text-green-400'}`}><Icon.ThumbsUp size={14}/></button><button onClick={()=>handleFeedback('down')} className={`flex items-center gap-1 text-xs transition-colors ${feedback==='down'?'text-gov-red':'text-gov-grey hover:text-gov-red'}`}><Icon.ThumbsDown size={14}/></button><button onClick={copyToClipboard} className="flex items-center gap-1 text-xs text-gov-grey hover:text-gov-blue dark:hover:text-blue-400 transition-colors">{copied?<><Icon.Check size={12}/> Copié</>:<><Icon.Copy size={12}/> Copier</>}</button></div>}</div></div>};
+    const handleVerify=async()=>{
+        if(otp.length!==6){setError('Entrez le code à 6 chiffres.');return}
+        setLoading(true);setError('');
+        try{
+            const{data,error}=await supabase.auth.verifyOtp({email,token:otp,type:type==='signup'?'signup':'recovery'});
+            if(error)throw error;
+            onSuccess(data);
+        }catch(err){
+            setError(err.message==='Token has expired or is invalid'?'Code invalide ou expiré.':err.message);
+            setOtp('');
+        }finally{setLoading(false)}
+    };
 
-// CHAT INTERFACE AVEC EXPORT
-const ChatInterface=({user,conversation,messages,setMessages})=>{const[input,setInput]=React.useState('');const[loading,setLoading]=React.useState(false);const[file,setFile]=React.useState(null);const[filePreview,setFilePreview]=React.useState(null);const[dragOver,setDragOver]=React.useState(false);const messagesEndRef=React.useRef(null);const fileInputRef=React.useRef(null);React.useEffect(()=>{messagesEndRef.current?.scrollIntoView({behavior:'smooth'})},[messages,loading]);const handleFileSelect=(f)=>{if(!f)return;const validTypes=['image/jpeg','image/png','image/gif','image/webp','application/pdf'];if(!validTypes.includes(f.type)){alert('Format non supporté.');return}if(f.size>10*1024*1024){alert('Fichier trop volumineux (max 10 Mo).');return}setFile(f);if(f.type.startsWith('image/')){const reader=new FileReader();reader.onload=(e)=>setFilePreview(e.target.result);reader.readAsDataURL(f)}else{setFilePreview(null)}};const clearFile=()=>{setFile(null);setFilePreview(null);if(fileInputRef.current)fileInputRef.current.value=''};const handleFeedback=async(msgId,type)=>{try{await supabase.from('messages').update({feedback:type}).eq('id',msgId)}catch(err){console.error(err)}};const exportConversation=()=>{let text=`Conversation: ${conversation.titre||'Sans titre'}\nDate: ${new Date().toLocaleDateString('fr-FR')}\n\n`;messages.forEach(m=>{text+=`${m.role==='user'?'Vous':'Assistant'} (${new Date(m.created_at).toLocaleTimeString('fr-FR')}):\n${m.content}\n\n`});const blob=new Blob([text],{type:'text/plain'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`conversation-${conversation.id.slice(0,8)}.txt`;a.click();URL.revokeObjectURL(url)};const sendMessage=async()=>{if((!input.trim()&&!file)||loading)return;const userMessage=input.trim();setInput('');let fileBase64=null;if(file){fileBase64=await new Promise((resolve)=>{const reader=new FileReader();reader.onload=(e)=>resolve(e.target.result);reader.readAsDataURL(file)})}const newUserMessage={id:Date.now(),role:'user',content:userMessage||`Fichier: ${file?.name}`,file:fileBase64,fileType:file?.type,fileName:file?.name,created_at:new Date().toISOString()};setMessages(prev=>[...prev,newUserMessage]);clearFile();setLoading(true);try{if(conversation?.id){await supabase.from('messages').insert({conversation_id:conversation.id,role:'user',content:newUserMessage.content})}const payload={question:userMessage,sessionId:conversation?.id||user.id};if(fileBase64){payload.file=fileBase64.split(',')[1];payload.fileName=file.name;payload.fileType=file.type}const response=await fetch(RAG_API_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await response.json();let answer=typeof data==='string'?data:data.output||data.answer||data.text||(Array.isArray(data)?data[0]?.output:JSON.stringify(data));const botMessage={id:Date.now()+1,role:'assistant',content:answer,created_at:new Date().toISOString()};setMessages(prev=>[...prev,botMessage]);if(conversation?.id){await supabase.from('messages').insert({conversation_id:conversation.id,role:'assistant',content:answer});if(messages.length===0){await supabase.from('conversations').update({titre:userMessage.substring(0,50),updated_at:new Date().toISOString()}).eq('id',conversation.id)}}}catch(err){setMessages(prev=>[...prev,{id:Date.now()+1,role:'assistant',content:"Erreur de connexion au serveur.",created_at:new Date().toISOString()}])}finally{setLoading(false)}};const suggestions=["Comment configurer ma messagerie ?","Comment accéder à ARENA ?","Comment réinitialiser mon mot de passe ?"];return<div className="flex flex-col h-full bg-white dark:bg-gov-dark-bg"><div className="flex-1 overflow-y-auto">{messages.length===0?<div className="h-full flex items-center justify-center p-8"><div className="text-center max-w-lg"><div className="w-16 h-16 rounded-lg bg-gov-blue dark:bg-blue-600 flex items-center justify-center mx-auto mb-6"><Icon.Bot size={32} className="text-white"/></div><h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Comment puis-je vous aider ?</h2><p className="text-gov-grey dark:text-gray-400 mb-8">Posez votre question ou sélectionnez une suggestion.</p><div className="space-y-2">{suggestions.map((s,i)=><button key={i} onClick={()=>setInput(s)} className="w-full px-4 py-3 rounded border border-gray-200 dark:border-gov-dark-border bg-white dark:bg-gov-dark-elevated text-left text-sm text-gray-700 dark:text-gray-300 hover:border-gov-blue dark:hover:border-blue-500 transition-colors">{s}</button>)}</div></div></div>:<div className="py-4">{messages.length>0&&<div className="flex justify-end px-4 mb-2"><button onClick={exportConversation} className="flex items-center gap-1.5 text-xs text-gov-grey hover:text-gov-blue dark:hover:text-blue-400 transition-colors"><Icon.Download size={14}/>Exporter</button></div>}{messages.map((msg)=><Message key={msg.id} message={msg} isUser={msg.role==='user'} onFeedback={handleFeedback}/>)}{loading&&<TypingIndicator/>}<div ref={messagesEndRef}/></div>}</div>{file&&<div className="px-4 py-3 border-t border-gray-200 dark:border-gov-dark-border bg-gray-50 dark:bg-gov-dark-elevated"><div className="flex items-center gap-3 p-3 bg-white dark:bg-gov-dark rounded border border-gray-200 dark:border-gov-dark-border">{filePreview?<img src={filePreview} alt="Aperçu" className="w-14 h-14 object-cover rounded"/>:<div className="w-14 h-14 bg-gray-100 dark:bg-gov-dark-border rounded flex items-center justify-center"><Icon.File size={20} className="text-gov-grey"/></div>}<div className="flex-1 min-w-0"><p className="text-sm text-gray-900 dark:text-gray-200 truncate">{file.name}</p><p className="text-xs text-gov-grey">{(file.size/1024).toFixed(1)} Ko</p></div><button onClick={clearFile} className="p-1.5 text-gov-grey hover:text-gov-red transition-colors"><Icon.X size={18}/></button></div></div>}<div className={`p-4 border-t border-gray-200 dark:border-gov-dark-border bg-white dark:bg-gov-dark-elevated ${dragOver?'ring-2 ring-inset ring-gov-blue':''}`} onDragOver={(e)=>{e.preventDefault();setDragOver(true)}} onDragLeave={()=>setDragOver(false)} onDrop={(e)=>{e.preventDefault();setDragOver(false);handleFileSelect(e.dataTransfer.files[0])}}><div className="flex gap-3 items-end"><input type="file" ref={fileInputRef} onChange={(e)=>handleFileSelect(e.target.files[0])} accept="image/*,.pdf" className="hidden"/><button onClick={()=>fileInputRef.current?.click()} className="p-2.5 rounded border border-gray-300 dark:border-gov-dark-border bg-white dark:bg-gov-dark text-gov-grey hover:text-gov-blue hover:border-gov-blue transition-colors"><Icon.Upload size={18}/></button><textarea value={input} onChange={(e)=>setInput(e.target.value)} onKeyDown={(e)=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}}} placeholder="Posez votre question..." rows={1} className="flex-1 px-4 py-2.5 rounded border border-gray-300 dark:border-gov-dark-border bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm placeholder-gov-grey resize-none transition-colors" style={{minHeight:'44px',maxHeight:'120px'}}/><button onClick={sendMessage} disabled={(!input.trim()&&!file)||loading} className="p-2.5 rounded bg-gov-blue hover:bg-gov-blue-hover text-white transition-colors disabled:opacity-40"><Icon.Send size={18}/></button></div></div></div>};
+    const handleResend=async()=>{
+        setResendLoading(true);setError('');
+        try{
+            if(type==='signup'){
+                const{error}=await supabase.auth.resend({type:'signup',email});
+                if(error)throw error;
+            }else{
+                const{error}=await supabase.auth.resetPasswordForEmail(email);
+                if(error)throw error;
+            }
+            setTimer(SECURITY.OTP_EXPIRATION);
+            setCanResend(false);
+            setOtp('');
+        }catch(err){setError(err.message)}finally{setResendLoading(false)}
+    };
 
-// SIDEBAR AVEC RECHERCHE
-const Sidebar=({user,profile,isAdmin,conversations,currentConversation,onSelectConversation,onNewConversation,onDeleteConversation,onLogout,onOpenProfile,onOpenAdmin,isOpen,onClose})=>{const[search,setSearch]=React.useState('');const filteredConversations=conversations.filter(c=>(c.titre||'').toLowerCase().includes(search.toLowerCase()));return<>{isOpen&&<div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={onClose}/>}<aside className={`fixed lg:relative inset-y-0 left-0 z-50 w-72 bg-white dark:bg-gov-dark-elevated border-r border-gray-200 dark:border-gov-dark-border flex flex-col transform transition-transform duration-200 ${isOpen?'translate-x-0':'-translate-x-full lg:translate-x-0'}`}><div className="p-4 border-b border-gray-200 dark:border-gov-dark-border"><div className="flex items-center justify-between mb-4"><GovLogo/><button onClick={onClose} className="lg:hidden p-1.5 text-gov-grey hover:text-gray-900 dark:hover:text-white"><Icon.X size={20}/></button></div><button onClick={onNewConversation} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded bg-gov-blue hover:bg-gov-blue-hover text-white text-sm font-medium transition-colors mb-3"><Icon.Plus size={16}/>Nouvelle conversation</button><div className="relative"><Icon.Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gov-grey"/><input type="text" value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Rechercher..." className="w-full pl-9 pr-3 py-2 rounded border border-gray-200 dark:border-gov-dark-border bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm"/></div></div><div className="flex-1 overflow-y-auto p-3"><p className="text-xs font-medium text-gov-grey uppercase tracking-wider px-3 mb-2">Historique</p><div className="space-y-1">{filteredConversations.map((conv)=><div key={conv.id} className={`group flex items-center gap-2 px-3 py-2.5 rounded cursor-pointer sidebar-item ${currentConversation?.id===conv.id?'bg-gov-light-blue dark:bg-blue-900/30 border-l-2 border-gov-blue':'hover:bg-gray-50 dark:hover:bg-gov-dark-border border-l-2 border-transparent'}`} onClick={()=>onSelectConversation(conv)}><Icon.Message size={16} className={currentConversation?.id===conv.id?'text-gov-blue dark:text-blue-400':'text-gov-grey'}/><span className={`flex-1 truncate text-sm ${currentConversation?.id===conv.id?'text-gov-blue dark:text-blue-400 font-medium':'text-gray-700 dark:text-gray-300'}`}>{conv.titre||'Nouvelle conversation'}</span><button onClick={(e)=>{e.stopPropagation();onDeleteConversation(conv.id)}} className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gov-dark rounded transition-all text-gov-grey hover:text-gov-red"><Icon.Trash size={14}/></button></div>)}{filteredConversations.length===0&&<p className="text-sm text-gov-grey text-center py-8 px-4">{search?'Aucun résultat.':'Aucune conversation.'}</p>}</div></div><div className="p-3 border-t border-gray-200 dark:border-gov-dark-border"><div className="flex items-center gap-2 mb-3"><ThemeToggle/>{isAdmin&&<button onClick={onOpenAdmin} className="p-2 rounded text-gov-grey hover:bg-gray-100 dark:hover:bg-gov-dark-border hover:text-gov-blue transition-colors" title="Administration"><Icon.Chart size={18}/></button>}</div><div className="flex items-center gap-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-gov-dark-border cursor-pointer transition-colors mb-2" onClick={onOpenProfile}><div className="w-9 h-9 rounded-full bg-gov-blue flex items-center justify-center text-white text-sm font-semibold">{(profile?.nom||user?.email)?.[0]?.toUpperCase()}</div><div className="flex-1 min-w-0"><p className="text-sm font-medium text-gray-900 dark:text-white truncate">{profile?.nom||user?.email?.split('@')[0]}</p><p className="text-xs text-gov-grey truncate">{user?.email}</p></div><Icon.Settings size={16} className="text-gov-grey"/></div><button onClick={onLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-200 dark:border-gov-dark-border text-gov-grey hover:bg-gray-50 dark:hover:bg-gov-dark-border hover:text-gov-red transition-colors text-sm"><Icon.Logout size={16}/>Déconnexion</button></div></aside></>};
+    React.useEffect(()=>{if(otp.length===6)handleVerify()},[otp]);
 
-const Dashboard=({user,onLogout})=>{const[conversations,setConversations]=React.useState([]);const[currentConversation,setCurrentConversation]=React.useState(null);const[messages,setMessages]=React.useState([]);const[sidebarOpen,setSidebarOpen]=React.useState(false);const[profile,setProfile]=React.useState(null);const[currentPage,setCurrentPage]=React.useState('chat');const isAdmin=ADMIN_EMAILS.includes(user?.email);React.useEffect(()=>{supabase.from('profiles').select('*').eq('id',user.id).single().then(({data})=>setProfile(data));supabase.from('conversations').select('*').order('updated_at',{ascending:false}).then(({data})=>setConversations(data||[]))},[]);const loadMessages=async(convId)=>{const{data}=await supabase.from('messages').select('*').eq('conversation_id',convId).order('created_at');setMessages(data||[])};const createConversation=async()=>{const{data}=await supabase.from('conversations').insert({user_id:user.id,titre:'Nouvelle conversation'}).select().single();if(data){setConversations(prev=>[data,...prev]);setCurrentConversation(data);setMessages([]);setSidebarOpen(false);setCurrentPage('chat')}};const deleteConversation=async(id)=>{await supabase.from('conversations').delete().eq('id',id);setConversations(prev=>prev.filter(c=>c.id!==id));if(currentConversation?.id===id){setCurrentConversation(null);setMessages([])}};const selectConversation=async(conv)=>{setCurrentConversation(conv);await loadMessages(conv.id);setSidebarOpen(false);setCurrentPage('chat')};if(currentPage==='profile')return<ProfilePage user={user} profile={profile} onBack={()=>setCurrentPage('chat')} onUpdateProfile={(u)=>setProfile(prev=>({...prev,...u}))}/>;if(currentPage==='admin'&&isAdmin)return<AdminPage onBack={()=>setCurrentPage('chat')}/>;return<div className="h-screen bg-gov-light-grey dark:bg-gov-dark flex"><Sidebar user={user} profile={profile} isAdmin={isAdmin} conversations={conversations} currentConversation={currentConversation} onSelectConversation={selectConversation} onNewConversation={createConversation} onDeleteConversation={deleteConversation} onLogout={onLogout} onOpenProfile={()=>setCurrentPage('profile')} onOpenAdmin={()=>setCurrentPage('admin')} isOpen={sidebarOpen} onClose={()=>setSidebarOpen(false)}/><main className="flex-1 flex flex-col min-w-0"><header className="lg:hidden flex items-center gap-4 px-4 py-3 border-b border-gray-200 dark:border-gov-dark-border bg-white dark:bg-gov-dark-elevated"><button onClick={()=>setSidebarOpen(true)} className="p-1.5 text-gov-grey hover:text-gray-900 dark:hover:text-white"><Icon.Menu size={20}/></button><h1 className="font-medium text-gray-900 dark:text-white truncate">{currentConversation?.titre||'Assistant ADN'}</h1></header>{currentConversation?<ChatInterface user={user} conversation={currentConversation} messages={messages} setMessages={setMessages}/>:<div className="flex-1 flex items-center justify-center p-8 bg-white dark:bg-gov-dark-bg"><div className="text-center max-w-md"><div className="w-20 h-20 rounded-lg bg-gov-blue dark:bg-blue-600 flex items-center justify-center mx-auto mb-6"><Icon.Bot size={40} className="text-white"/></div><h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-3">Bienvenue sur l'Assistant ADN</h2><p className="text-gov-grey dark:text-gray-400 mb-8">Votre assistant numérique pour les procédures informatiques.</p><button onClick={createConversation} className="inline-flex items-center gap-2 px-6 py-3 rounded bg-gov-blue hover:bg-gov-blue-hover text-white font-medium transition-colors"><Icon.Plus size={18}/>Démarrer une conversation</button></div></div>}</main></div>};
+    return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark flex flex-col">
+        <header className="bg-white dark:bg-gov-dark-elevated border-b border-gray-200 dark:border-gov-dark-border px-6 py-4"><div className="max-w-7xl mx-auto flex items-center justify-between"><GovLogo/><ThemeToggle/></div></header>
+        <main className="flex-1 flex items-center justify-center p-6">
+            <div className="w-full max-w-md">
+                <div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg overflow-hidden">
+                    <div className="bg-gov-blue px-6 py-5 text-center">
+                        <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3"><Icon.Mail size={24} className="text-white"/></div>
+                        <h1 className="text-xl font-semibold text-white">Vérification</h1>
+                        <p className="text-blue-200 text-sm mt-1">Code envoyé à {email}</p>
+                    </div>
+                    <div className="p-6">
+                        <p className="text-sm text-gov-grey text-center mb-6">Entrez le code à 6 chiffres reçu par email</p>
+                        <OTPInput length={6} value={otp} onChange={setOtp} disabled={loading}/>
+                        
+                        <div className="flex items-center justify-center gap-2 mt-4 text-sm">
+                            <Icon.Clock size={16} className={timer>60?'text-gov-grey':'text-gov-red'}/>
+                            <span className={timer>60?'text-gov-grey':'text-gov-red'}>{timer>0?`Expire dans ${formatTime(timer)}`:'Code expiré'}</span>
+                        </div>
 
-const App=()=>{const[user,setUser]=React.useState(null);const[loading,setLoading]=React.useState(true);const[page,setPage]=React.useState('login');React.useEffect(()=>{supabase.auth.getSession().then(({data:{session}})=>{setUser(session?.user??null);setLoading(false)});const{data:{subscription}}=supabase.auth.onAuthStateChange((_,session)=>setUser(session?.user??null));return()=>subscription.unsubscribe()},[]);if(loading){return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark flex items-center justify-center"><div className="text-center"><div className="w-12 h-12 rounded bg-gov-blue flex items-center justify-center mx-auto mb-4"><Icon.Bot size={24} className="text-white"/></div><p className="text-sm text-gov-grey">Chargement...</p></div></div>}if(user)return<Dashboard user={user} onLogout={async()=>{await supabase.auth.signOut();setUser(null)}}/>;if(page==='register')return<RegisterPage onSwitchToLogin={()=>setPage('login')}/>;if(page==='forgot')return<ForgotPasswordPage onBack={()=>setPage('login')}/>;return<LoginPage onLogin={setUser} onSwitchToRegister={()=>setPage('register')} onForgotPassword={()=>setPage('forgot')}/>};
+                        {error&&<div className="mt-4 flex items-start gap-2 p-3 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"><Icon.AlertCircle size={16} className="text-gov-red flex-shrink-0 mt-0.5"/><p className="text-sm text-gov-red">{error}</p></div>}
+                        
+                        <button onClick={handleVerify} disabled={loading||otp.length!==6} className="w-full mt-6 py-2.5 rounded bg-gov-blue hover:bg-gov-blue-hover text-white text-sm font-medium transition-colors disabled:opacity-50">
+                            {loading?'Vérification...':'Vérifier le code'}
+                        </button>
 
-ReactDOM.createRoot(document.getElementById('root')).render(<ThemeProvider><App/></ThemeProvider>);
+                        <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gov-dark-border text-center">
+                            <p className="text-sm text-gov-grey mb-3">Pas reçu le code ?</p>
+                            <button onClick={handleResend} disabled={!canResend||resendLoading} className={`inline-flex items-center gap-2 text-sm font-medium transition-colors ${canResend?'text-gov-blue hover:underline':'text-gov-grey cursor-not-allowed'}`}>
+                                <Icon.RefreshCw size={14} className={resendLoading?'animate-spin':''}/>
+                                {resendLoading?'Envoi...':canResend?'Renvoyer le code':`Renvoyer dans ${formatTime(timer)}`}
+                            </button>
+                        </div>
+
+                        <button onClick={onBack} className="w-full mt-4 text-sm text-gov-grey hover:text-gov-blue transition-colors">Retour</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>;
+};
+
+// ============================================
+// RESET PASSWORD PAGE (avec nouveau mot de passe)
+// ============================================
+const NewPasswordPage=({onSuccess})=>{
+    const[password,setPassword]=React.useState('');
+    const[confirmPassword,setConfirmPassword]=React.useState('');
+    const[showPassword,setShowPassword]=React.useState(false);
+    const[loading,setLoading]=React.useState(false);
+    const[error,setError]=React.useState('');
+
+    const handleSubmit=async(e)=>{
+        e.preventDefault();
+        const strength=checkPasswordStrength(password);
+        if(!strength.strong){setError('Mot de passe trop faible.');return}
+        if(password!==confirmPassword){setError('Les mots de passe ne correspondent pas.');return}
+        setLoading(true);setError('');
+        try{
+            const{error}=await supabase.auth.updateUser({password});
+            if(error)throw error;
+            onSuccess();
+        }catch(err){setError(err.message)}finally{setLoading(false)}
+    };
+
+    return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark flex flex-col">
+        <header className="bg-white dark:bg-gov-dark-elevated border-b border-gray-200 dark:border-gov-dark-border px-6 py-4"><div className="max-w-7xl mx-auto flex items-center justify-between"><GovLogo/><ThemeToggle/></div></header>
+        <main className="flex-1 flex items-center justify-center p-6">
+            <div className="w-full max-w-md">
+                <div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg overflow-hidden">
+                    <div className="bg-gov-blue px-6 py-5"><h1 className="text-xl font-semibold text-white">Nouveau mot de passe</h1></div>
+                    <div className="p-6">
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Nouveau mot de passe</label>
+                                <div className="relative">
+                                    <input type={showPassword?'text':'password'} value={password} onChange={(e)=>setPassword(e.target.value)} className="w-full px-3 py-2.5 pr-10 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" required/>
+                                    <button type="button" onClick={()=>setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gov-grey hover:text-gov-blue">{showPassword?<Icon.EyeOff size={18}/>:<Icon.Eye size={18}/>}</button>
+                                </div>
+                                <PasswordStrengthIndicator password={password}/>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Confirmer</label>
+                                <input type="password" value={confirmPassword} onChange={(e)=>setConfirmPassword(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" required/>
+                                {confirmPassword&&password!==confirmPassword&&<p className="text-xs text-gov-red mt-1">Les mots de passe ne correspondent pas.</p>}
+                            </div>
+                            {error&&<div className="flex items-start gap-2 p-3 rounded bg-red-50 dark:bg-red-900/20 border border-red-200"><Icon.AlertCircle size={16} className="text-gov-red flex-shrink-0 mt-0.5"/><p className="text-sm text-gov-red">{error}</p></div>}
+                            <button type="submit" disabled={loading} className="w-full py-2.5 rounded bg-gov-blue hover:bg-gov-blue-hover text-white text-sm font-medium disabled:opacity-50">{loading?'Modification...':'Modifier le mot de passe'}</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>;
+};
+
+// ============================================
+// FORGOT PASSWORD PAGE
+// ============================================
+const ForgotPasswordPage=({onBack,onCodeSent})=>{
+    const[email,setEmail]=React.useState('');
+    const[loading,setLoading]=React.useState(false);
+    const[error,setError]=React.useState('');
+
+    const handleSubmit=async(e)=>{
+        e.preventDefault();
+        if(!isValidEmail(email)){setError('Email invalide.');return}
+        setLoading(true);setError('');
+        try{
+            const{error}=await supabase.auth.resetPasswordForEmail(email);
+            if(error)throw error;
+            onCodeSent(email);
+        }catch(err){setError(err.message)}finally{setLoading(false)}
+    };
+
+    return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark flex flex-col">
+        <header className="bg-white dark:bg-gov-dark-elevated border-b border-gray-200 dark:border-gov-dark-border px-6 py-4"><div className="max-w-7xl mx-auto flex items-center justify-between"><GovLogo/><ThemeToggle/></div></header>
+        <main className="flex-1 flex items-center justify-center p-6">
+            <div className="w-full max-w-md">
+                <div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg overflow-hidden">
+                    <div className="bg-gov-blue px-6 py-5"><h1 className="text-xl font-semibold text-white">Mot de passe oublié</h1></div>
+                    <div className="p-6">
+                        <p className="text-sm text-gov-grey mb-6">Entrez votre email pour recevoir un code de réinitialisation.</p>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Email</label>
+                                <input type="email" value={email} onChange={(e)=>setEmail(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" placeholder="prenom.nom@ac-creteil.fr" required/>
+                            </div>
+                            {error&&<div className="flex items-start gap-2 p-3 rounded bg-red-50 dark:bg-red-900/20 border border-red-200"><Icon.AlertCircle size={16} className="text-gov-red flex-shrink-0 mt-0.5"/><p className="text-sm text-gov-red">{error}</p></div>}
+                            <button type="submit" disabled={loading} className="w-full py-2.5 rounded bg-gov-blue hover:bg-gov-blue-hover text-white text-sm font-medium disabled:opacity-50">{loading?'Envoi...':'Envoyer le code'}</button>
+                        </form>
+                        <button onClick={onBack} className="w-full mt-4 text-sm text-gov-grey hover:text-gov-blue">Retour à la connexion</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>;
+};
+
+// ============================================
+// LOGIN PAGE
+// ============================================
+const LoginPage=({onLogin,onSwitchToRegister,onForgotPassword})=>{
+    const[email,setEmail]=React.useState('');
+    const[password,setPassword]=React.useState('');
+    const[showPassword,setShowPassword]=React.useState(false);
+    const[loading,setLoading]=React.useState(false);
+    const[error,setError]=React.useState('');
+
+    const handleSubmit=async(e)=>{
+        e.preventDefault();
+        const check=checkLoginAttempts(email);
+        if(!check.allowed){setError(`Compte bloqué. Réessayez dans ${Math.ceil(check.lockedFor/60)} min.`);return}
+        if(!isValidEmail(email)){setError('Email invalide.');return}
+        setLoading(true);setError('');
+        try{
+            const{data,error}=await supabase.auth.signInWithPassword({email,password});
+            if(error)throw error;
+            recordLoginAttempt(email,true);
+            onLogin(data.user);
+        }catch(err){
+            recordLoginAttempt(email,false);
+            const remaining=checkLoginAttempts(email).remaining;
+            setError(`Identifiants incorrects.${remaining>0?` ${remaining} tentative(s) restante(s).`:''}`);
+        }finally{setLoading(false)}
+    };
+
+    return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark flex flex-col">
+        <header className="bg-white dark:bg-gov-dark-elevated border-b border-gray-200 dark:border-gov-dark-border px-6 py-4"><div className="max-w-7xl mx-auto flex items-center justify-between"><GovLogo/><ThemeToggle/></div></header>
+        <main className="flex-1 flex items-center justify-center p-6">
+            <div className="w-full max-w-md">
+                <div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg overflow-hidden">
+                    <div className="bg-gov-blue px-6 py-5"><h1 className="text-xl font-semibold text-white">Assistant ADN</h1><p className="text-blue-200 text-sm mt-1">Portail d'assistance numérique</p></div>
+                    <div className="p-6">
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Connexion</h2>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Email</label>
+                                <input type="email" value={email} onChange={(e)=>setEmail(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" placeholder="prenom.nom@ac-creteil.fr" required/>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Mot de passe</label>
+                                <div className="relative">
+                                    <input type={showPassword?'text':'password'} value={password} onChange={(e)=>setPassword(e.target.value)} className="w-full px-3 py-2.5 pr-10 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" required/>
+                                    <button type="button" onClick={()=>setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gov-grey">{showPassword?<Icon.EyeOff size={18}/>:<Icon.Eye size={18}/>}</button>
+                                </div>
+                                <button type="button" onClick={onForgotPassword} className="text-xs text-gov-blue hover:underline mt-1.5">Mot de passe oublié ?</button>
+                            </div>
+                            {error&&<div className="flex items-start gap-2 p-3 rounded bg-red-50 dark:bg-red-900/20 border border-red-200"><Icon.AlertCircle size={16} className="text-gov-red flex-shrink-0 mt-0.5"/><p className="text-sm text-gov-red">{error}</p></div>}
+                            <button type="submit" disabled={loading} className="w-full py-2.5 rounded bg-gov-blue hover:bg-gov-blue-hover text-white text-sm font-medium disabled:opacity-50">{loading?'Connexion...':'Se connecter'}</button>
+                        </form>
+                        <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gov-dark-border text-center">
+                            <p className="text-sm text-gov-grey">Pas de compte ? <button onClick={onSwitchToRegister} className="text-gov-blue hover:underline font-medium">Créer un compte</button></p>
+                        </div>
+                    </div>
+                </div>
+                <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gov-grey"><Icon.Shield size={14}/><span>Connexion sécurisée</span></div>
+            </div>
+        </main>
+    </div>;
+};
+
+// ============================================
+// REGISTER PAGE
+// ============================================
+const RegisterPage=({onSwitchToLogin,onCodeSent})=>{
+    const[email,setEmail]=React.useState('');
+    const[password,setPassword]=React.useState('');
+    const[confirmPassword,setConfirmPassword]=React.useState('');
+    const[showPassword,setShowPassword]=React.useState(false);
+    const[nom,setNom]=React.useState('');
+    const[etablissement,setEtablissement]=React.useState('');
+    const[loading,setLoading]=React.useState(false);
+    const[error,setError]=React.useState('');
+
+    const handleSubmit=async(e)=>{
+        e.preventDefault();
+        if(!isValidEmail(email)){setError('Email invalide.');return}
+        const strength=checkPasswordStrength(password);
+        if(!strength.strong){setError('Mot de passe trop faible.');return}
+        if(password!==confirmPassword){setError('Les mots de passe ne correspondent pas.');return}
+        setLoading(true);setError('');
+        try{
+            const{data,error}=await supabase.auth.signUp({email,password,options:{data:{nom:sanitizeInput(nom),etablissement:sanitizeInput(etablissement)}}});
+            if(error)throw error;
+            onCodeSent(email);
+        }catch(err){setError(err.message)}finally{setLoading(false)}
+    };
+
+    return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark flex flex-col">
+        <header className="bg-white dark:bg-gov-dark-elevated border-b border-gray-200 dark:border-gov-dark-border px-6 py-4"><div className="max-w-7xl mx-auto flex items-center justify-between"><GovLogo/><ThemeToggle/></div></header>
+        <main className="flex-1 flex items-center justify-center p-6">
+            <div className="w-full max-w-md">
+                <div className="bg-white dark:bg-gov-dark-elevated border border-gray-200 dark:border-gov-dark-border rounded-lg overflow-hidden">
+                    <div className="bg-gov-blue px-6 py-5"><h1 className="text-xl font-semibold text-white">Créer un compte</h1></div>
+                    <div className="p-6">
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Nom complet</label><input type="text" value={nom} onChange={(e)=>setNom(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" placeholder="Jean Dupont" maxLength={100} required/></div>
+                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Établissement</label><input type="text" value={etablissement} onChange={(e)=>setEtablissement(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" placeholder="Lycée Victor Hugo" maxLength={200}/></div>
+                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Email</label><input type="email" value={email} onChange={(e)=>setEmail(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" placeholder="prenom.nom@ac-creteil.fr" required/></div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Mot de passe</label>
+                                <div className="relative"><input type={showPassword?'text':'password'} value={password} onChange={(e)=>setPassword(e.target.value)} className="w-full px-3 py-2.5 pr-10 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" required/><button type="button" onClick={()=>setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gov-grey">{showPassword?<Icon.EyeOff size={18}/>:<Icon.Eye size={18}/>}</button></div>
+                                <PasswordStrengthIndicator password={password}/>
+                            </div>
+                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Confirmer</label><input type="password" value={confirmPassword} onChange={(e)=>setConfirmPassword(e.target.value)} className="w-full px-3 py-2.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gov-dark text-gray-900 dark:text-white text-sm" required/>{confirmPassword&&password!==confirmPassword&&<p className="text-xs text-gov-red mt-1">Non identiques</p>}</div>
+                            {error&&<div className="flex items-start gap-2 p-3 rounded bg-red-50 dark:bg-red-900/20 border border-red-200"><Icon.AlertCircle size={16} className="text-gov-red flex-shrink-0 mt-0.5"/><p className="text-sm text-gov-red">{error}</p></div>}
+                            <button type="submit" disabled={loading} className="w-full py-2.5 rounded bg-gov-blue hover:bg-gov-blue-hover text-white text-sm font-medium disabled:opacity-50">{loading?'Création...':'Créer mon compte'}</button>
+                        </form>
+                        <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gov-dark-border text-center"><p className="text-sm text-gov-grey">Déjà inscrit ? <button onClick={onSwitchToLogin} className="text-gov-blue hover:underline font-medium">Se connecter</button></p></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>;
+};
+ const Dashboard = ({ user, onLogout }) => {
+
+const[conversations,setConversations]=React.useState([]);
+const[currentConversation,setCurrentConversation]=React.useState(null);
+const[messages,setMessages]=React.useState([]);
+const[sidebarOpen,setSidebarOpen]=React.useState(false);
+const[profile,setProfile]=React.useState(null);
+const[currentPage,setCurrentPage]=React.useState('chat');
+
+const isAdmin=ADMIN_EMAILS.includes(user?.email);
+
+React.useEffect(()=>{
+    supabase.from('profiles').select('*').eq('id',user.id).single()
+      .then(({data})=>setProfile(data));
+
+    supabase.from('conversations').select('*')
+      .order('updated_at',{ascending:false})
+      .then(({data})=>setConversations(data||[]));
+},[]);
+
+const loadMessages=async(convId)=>{
+  const{data}=await supabase.from('messages')
+    .select('*')
+    .eq('conversation_id',convId)
+    .order('created_at');
+  setMessages(data||[]);
+};
+
+const createConversation=async()=>{
+  const{data}=await supabase.from('conversations')
+    .insert({user_id:user.id,titre:'Nouvelle conversation'})
+    .select()
+    .single();
+
+  if(data){
+    setConversations(prev=>[data,...prev]);
+    setCurrentConversation(data);
+    setMessages([]);
+    setSidebarOpen(false);
+    setCurrentPage('chat');
+  }
+};
+
+const deleteConversation=async(id)=>{
+  await supabase.from('conversations').delete().eq('id',id);
+  setConversations(prev=>prev.filter(c=>c.id!==id));
+
+  if(currentConversation?.id===id){
+    setCurrentConversation(null);
+    setMessages([]);
+  }
+};
+
+const selectConversation=async(conv)=>{
+  setCurrentConversation(conv);
+  await loadMessages(conv.id);
+  setSidebarOpen(false);
+  setCurrentPage('chat');
+};
+
+if(currentPage==='profile')
+  return <ProfilePage user={user} profile={profile}
+    onBack={()=>setCurrentPage('chat')}
+    onUpdateProfile={(u)=>setProfile(prev=>({...prev,...u}))}
+/>;
+
+if(currentPage==='admin' && isAdmin)
+  return <AdminPage onBack={()=>setCurrentPage('chat')}/>;
+
+
+return (
+  <div className="h-screen bg-gov-light-grey dark:bg-gov-dark flex">
+    <Sidebar
+      user={user}
+      profile={profile}
+      isAdmin={isAdmin}
+      conversations={conversations}
+      currentConversation={currentConversation}
+      onSelectConversation={selectConversation}
+      onNewConversation={createConversation}
+      onDeleteConversation={deleteConversation}
+      onLogout={onLogout}
+      onOpenProfile={()=>setCurrentPage('profile')}
+      onOpenAdmin={()=>setCurrentPage('admin')}
+      isOpen={sidebarOpen}
+      onClose={()=>setSidebarOpen(false)}
+    />
+
+    <main className="flex-1 flex flex-col min-w-0">
+      {currentConversation
+        ? <ChatInterface
+            user={user}
+            conversation={currentConversation}
+            messages={messages}
+            setMessages={setMessages}
+          />
+        : <div className="flex-1 flex items-center justify-center p-8">
+            <button onClick={createConversation}>Démarrer une conversation</button>
+          </div>
+      }
+    </main>
+  </div>
+);
+
+};
+
+// ============================================
+// APP PRINCIPALE
+// ============================================
+const App=()=>{
+    const[user,setUser]=React.useState(null);
+    const[loading,setLoading]=React.useState(true);
+    const[page,setPage]=React.useState('login');
+    const[verifyEmail,setVerifyEmail]=React.useState('');
+    const[verifyType,setVerifyType]=React.useState('signup');
+    const[showNewPassword,setShowNewPassword]=React.useState(false);
+
+    React.useEffect(()=>{
+        supabase.auth.getSession().then(({data:{session}})=>{
+            setUser(session?.user??null);
+            setLoading(false);
+        });
+        const{data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
+            if(event==='PASSWORD_RECOVERY'){
+                setShowNewPassword(true);
+            }else{
+                setUser(session?.user??null);
+            }
+        });
+        return()=>subscription.unsubscribe();
+    },[]);
+
+    if(loading){
+        return<div className="min-h-screen bg-gov-light-grey dark:bg-gov-dark flex items-center justify-center"><div className="text-center"><div className="w-12 h-12 rounded bg-gov-blue flex items-center justify-center mx-auto mb-4"><Icon.Bot size={24} className="text-white"/></div><p className="text-sm text-gov-grey">Chargement...</p></div></div>;
+    }
+
+    // Si on doit changer le mot de passe (après vérif OTP recovery)
+    if(showNewPassword){
+        return<ThemeProvider><NewPasswordPage onSuccess={()=>{setShowNewPassword(false);setPage('login')}}/></ThemeProvider>;
+    }
+
+    // Si connecté
+    if(user){
+        return<ThemeProvider><Dashboard user={user} onLogout={async()=>{await supabase.auth.signOut();setUser(null)}}/></ThemeProvider>;
+    }
+
+    // Page de vérification OTP
+    if(page==='verify'){
+        return<ThemeProvider><VerifyOTPPage email={verifyEmail} type={verifyType} onSuccess={(data)=>{if(verifyType==='signup'){setPage('login')}else{setShowNewPassword(true);setPage('login')}}} onBack={()=>setPage(verifyType==='signup'?'register':'forgot')}/></ThemeProvider>;
+    }
+
+    // Page inscription
+    if(page==='register'){
+        return<ThemeProvider><RegisterPage onSwitchToLogin={()=>setPage('login')} onCodeSent={(email)=>{setVerifyEmail(email);setVerifyType('signup');setPage('verify')}}/></ThemeProvider>;
+    }
+
+    // Page mot de passe oublié
+    if(page==='forgot'){
+        return<ThemeProvider><ForgotPasswordPage onBack={()=>setPage('login')} onCodeSent={(email)=>{setVerifyEmail(email);setVerifyType('recovery');setPage('verify')}}/></ThemeProvider>;
+    }
+
+    // Page connexion
+    return<ThemeProvider><LoginPage onLogin={setUser} onSwitchToRegister={()=>setPage('register')} onForgotPassword={()=>setPage('forgot')}/></ThemeProvider>;
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>
