@@ -605,9 +605,6 @@ const App=()=>{
     </ThemeProvider>
   );
 }
-
-    }
-
     // Page inscription
     if(page==='register'){
         return<ThemeProvider><RegisterPage onSwitchToLogin={()=>setPage('login')} onCodeSent={(email)=>{setVerifyEmail(email);setVerifyType('signup');setPage('verify')}}/></ThemeProvider>;
