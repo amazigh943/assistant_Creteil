@@ -24,7 +24,7 @@
 <body class="font-source antialiased">
 <div id="root"></div>
 <script type="text/babel">
-const SUPABASE_URL='https://zoxmtwpwhleeytmevlyv.supabase.co',SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpveG10d3B3aGxlZXl0bWV2bHl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2NjQxNTcsImV4cCI6MjA4MDI0MDE1N30.FwjafAHukrcFPJO4hi6GRXHlRcHPTkcvGG--KfSidVE',RAG_API_URL='http://localhost:5679/webhook/Rag',ADMIN_EMAILS=['admin@ac-creteil.fr','thadjazi@ac-creteil.fr'];
+const SUPABASE_URL='https://zoxmtwpwhleeytmevlyv.supabase.co',SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpveG10d3B3aGxlZXl0bWV2bHl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2NjQxNTcsImV4cCI6MjA4MDI0MDE1N30.FwjafAHukrcFPJO4hi6GRXHlRcHPTkcvGG--KfSidVE',RAG_API_URL='http://localhost:8000/chat',ADMIN_EMAILS=['admin@ac-creteil.fr','thadjazi@ac-creteil.fr'];
 const supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const SECURITY={MAX_MESSAGE_LENGTH:5000,MAX_FILE_SIZE:10*1024*1024,RATE_LIMIT_MESSAGES:20,RATE_LIMIT_WINDOW:60000,PASSWORD_MIN_LENGTH:8,ALLOWED_FILE_TYPES:['image/jpeg','image/png','image/gif','image/webp','application/pdf'],OTP_EXPIRATION:600};
 const sanitizeInput=(s)=>typeof s!=='string'?'':s.replace(/[<>]/g,'').trim().slice(0,SECURITY.MAX_MESSAGE_LENGTH);
