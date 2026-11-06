@@ -1,0 +1,11 @@
+{
+  "name": "azeroth-idle",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Idle RPG fantasy jouable dans le navigateur (aucune dépendance, modules ES natifs).",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test \"tests/**/*.test.mjs\""
+  }
+}

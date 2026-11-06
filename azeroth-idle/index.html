@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1a110a">
+  <meta name="description" content="Idle RPG fantasy : recrutez des héros, terrassez les monstres et progressez à travers les royaumes.">
+  <title>Aldoria Idle</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-title">Aldoria Idle</span>
+        <span class="brand-sub">Chroniques des Royaumes</span>
+      </div>
+      <div class="resources" id="hud"></div>
+      <button class="icon-btn" id="btn-settings" aria-label="Paramètres" data-tip="Paramètres et sauvegarde">
+        <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></span>
+      </button>
+    </header>
+
+    <aside class="sidebar frame">
+      <nav class="tabs" id="tabs" role="tablist" aria-label="Onglets du jeu"></nav>
+      <div class="panel-body" id="panel"></div>
+    </aside>
+
+    <main class="stage frame">
+      <div class="stage-inner" id="stage"></div>
+      <div id="toasts" class="toasts" aria-live="polite"></div>
+    </main>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <noscript><p class="noscript">Ce jeu nécessite JavaScript.</p></noscript>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
