@@ -1,0 +1,151 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * FlowPilot — identité visuelle
+ * Encre bleu-nuit + accent « Flow » (sarcelle). Neutres froids, filets fins,
+ * typographie compacte. Couleurs sémantiques réservées aux priorités et statuts.
+ */
+
+:root {
+  --radius: 0.5rem;
+
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.2 0.018 265);
+
+  --surface: oklch(0.982 0.003 260); /* barre latérale, zones secondaires */
+  --surface-strong: oklch(0.965 0.004 260);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
+
+  --primary: oklch(0.24 0.035 265); /* encre */
+  --primary-foreground: oklch(0.985 0.002 260);
+  --secondary: oklch(0.965 0.004 260);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.965 0.004 260);
+  --muted-foreground: oklch(0.5 0.014 265);
+  --subtle: oklch(0.64 0.012 265);
+  --accent: oklch(0.955 0.005 260);
+  --accent-foreground: var(--foreground);
+
+  --flow: oklch(0.58 0.105 190); /* accent de marque */
+  --flow-strong: oklch(0.5 0.1 192);
+  --flow-soft: oklch(0.965 0.025 190);
+  --flow-foreground: oklch(0.99 0.01 190);
+
+  --destructive: oklch(0.58 0.2 25);
+  --border: oklch(0.925 0.005 265);
+  --border-strong: oklch(0.88 0.007 265);
+  --input: oklch(0.89 0.007 265);
+  --ring: oklch(0.58 0.105 190 / 0.45);
+
+  /* Sémantique */
+  --p-critical: oklch(0.6 0.2 27);
+  --p-high: oklch(0.68 0.16 50);
+  --p-medium: oklch(0.55 0.02 265);
+  --p-low: oklch(0.72 0.012 265);
+
+  --s-new: oklch(0.7 0.012 265);
+  --s-open: oklch(0.55 0.02 265);
+  --s-progress: oklch(0.74 0.15 75);
+  --s-waiting: oklch(0.62 0.13 300);
+  --s-scheduled: oklch(0.58 0.14 250);
+  --s-resolved: var(--flow);
+
+  --team-teal: oklch(0.6 0.1 190);
+  --team-blue: oklch(0.58 0.14 255);
+  --team-amber: oklch(0.72 0.14 70);
+  --team-rose: oklch(0.63 0.16 10);
+
+  --warning: oklch(0.68 0.15 60);
+  --warning-soft: oklch(0.975 0.03 80);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+
+  --radius-sm: calc(var(--radius) - 3px);
+  --radius-md: calc(var(--radius) - 1px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-strong: var(--surface-strong);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle: var(--subtle);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-flow: var(--flow);
+  --color-flow-strong: var(--flow-strong);
+  --color-flow-soft: var(--flow-soft);
+  --color-flow-foreground: var(--flow-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+
+  --color-p-critical: var(--p-critical);
+  --color-p-high: var(--p-high);
+  --color-p-medium: var(--p-medium);
+  --color-p-low: var(--p-low);
+  --color-s-new: var(--s-new);
+  --color-s-open: var(--s-open);
+  --color-s-progress: var(--s-progress);
+  --color-s-waiting: var(--s-waiting);
+  --color-s-scheduled: var(--s-scheduled);
+  --color-s-resolved: var(--s-resolved);
+  --color-team-teal: var(--team-teal);
+  --color-team-blue: var(--team-blue);
+  --color-team-amber: var(--team-amber);
+  --color-team-rose: var(--team-rose);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-background text-foreground text-sm;
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    background: oklch(0.58 0.105 190 / 0.18);
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
