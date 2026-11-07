@@ -203,6 +203,17 @@ describe("services IA simulés", () => {
     expect(insight.classification.teamId).toBe("team-net");
   });
 
+  it("assistant : ne surclasse pas un incident individuel en critique", () => {
+    const data = fresh();
+    for (const id of ["t-1045", "t-1036"]) {
+      const ticket = data.tickets.find((t) => t.id === id)!;
+      const { classification } = getAiServices().assistant.analyzeTicket({ ticket, data });
+      expect(classification.priority).not.toBe("critical");
+    }
+    const outage = data.tickets.find((t) => t.id === "t-1042")!;
+    expect(getAiServices().assistant.analyzeTicket({ ticket: outage, data }).classification.priority).toBe("critical");
+  });
+
   it("assistant : retrouve un ticket similaire résolu", () => {
     const data = fresh();
     const ticket = data.tickets.find((t) => t.id === "t-1042")!;

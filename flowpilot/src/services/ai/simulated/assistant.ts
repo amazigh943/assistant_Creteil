@@ -12,7 +12,7 @@ import { firstSentence, normalize } from "./text";
 
 const URGENCY_SIGNALS: { terms: string[]; priority: TicketPriority; label: string }[] = [
   {
-    terms: ["tout le service", "plus personne", "tous les postes", "production", "bloquant", "urgence vitale"],
+    terms: ["tout le service", "plus personne", "plus aucun poste", "tous les postes", "production arretee", "urgence vitale"],
     priority: "critical",
     label: "impact collectif",
   },
